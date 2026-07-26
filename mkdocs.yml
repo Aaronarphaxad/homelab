@@ -1,2 +1,62 @@
-site_name: Aaron's Homelab
-theme: cluster
+site_name: Aaron Omale | Homelab
+site_description: Public documentation of my homelab build, troubleshooting notes, and infrastructure learning process
+site_author: Aaron Omale
+site_url: https://aaronarphaxad.github.io/homelab/
+
+repo_name: Aaronarphaxad/homelab
+repo_url: https://github.com/Aaronarphaxad/homelab
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.sections
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Overview: index.md
+  - Architecture:
+      - architecture/index.md
+      - Network & Topology: architecture/network-topology.md
+      - IPAM & Subnets: architecture/ipam.md
+      - Hardware & Host: architecture/hardware.md
+  - Labs:
+      - labs/index.md
+      - Active Directory: labs/active-directory.md
+      - Monitoring: labs/monitoring.md
+      - Automation: labs/automation.md
+      - SIEM: labs/siem.md
+      - Kubernetes: labs/kubernetes.md
+  - Infrastructure & Services:
+      - services/index.md
+      - Proxmox VE Host Setup: services/proxmox.md
+      - OPNsense Firewall: services/opnsense.md
+      - WireGuard VPN: services/wireguard-vpn.md
+      - LXC & Docker Services: services/lxc-containers.md
+  - Journal:
+      - journal/index.md
+      - 2026-07-26 - turning starter notes into a public docs structure: journal/2026-07-26-documenting-the-lab.md
+
