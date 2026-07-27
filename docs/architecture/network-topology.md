@@ -4,7 +4,7 @@ This page is the simple architecture reference for the lab.
 
 ## Diagram
 
-I will add a network image here later.
+![alt text](image.png)
 
 ## High-level flow
 
@@ -12,6 +12,8 @@ I will add a network image here later.
 Internet
   |
 Upstream residential gateway
+  |
+Remote access through WireGuard
   |
 Proxmox host
   |
@@ -23,8 +25,7 @@ VLAN-aware internal network
 |- Management
 |- Engineering / Infrastructure
 |- Applications
-  |
-Remote access through WireGuard
+  
 ```
 
 ## Topology notes
