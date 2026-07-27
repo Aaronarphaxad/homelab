@@ -14,14 +14,15 @@ These are the VMs clearly documented in the current notes.
 
 | Name | Platform | Role | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `fw-01` | OPNsense VM | Firewall, routing, NAT, WireGuard | Active | Connected to both WAN and internal bridges |
-| `mgmt-01` | Debian VM | Internal management workstation | Active | Used for admin work from inside the lab |
+| `fw-02` | OPNsense VM | Firewall, routing, NAT, WireGuard | Active | Connected to both WAN and internal bridges |
+| `mgmt-03` | Debian VM | Internal management workstation | Active | Used for admin work from inside the lab |
 
 ## Current LXC inventory
 
-No specific LXC instances are documented in the current public notes yet.
+| Name | Platform | Role | Status | Notes |
+| --- | --- | --- | --- | --- |
+| `bento-04` | LXC | Bento: PDF editing tool | Active | VLAN 30 |
 
-That is intentional here: I would rather list real deployed containers once they exist and have a stable purpose than invent filler entries now.
 
 ## Current Docker-host inventory
 

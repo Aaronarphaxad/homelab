@@ -6,138 +6,124 @@ This page is based on the WireGuard deployment guide you shared and keeps the or
 
 Provide secure remote access to the internal lab without exposing the Proxmox UI, OPNsense UI, or SSH directly to the public internet.
 
-## Architecture summary
+## Architectural Summary
 
-The VPN design is meant to:
+To enable secure, encrypted remote access to the OPNsense firewall, Proxmox VE host, and all internal VLAN subnets from external networks such as mobile 5G or remote Wi-Fi, a WireGuard remote access VPN tunnel was implemented.
 
-- terminate on OPNsense
-- give remote clients access to internal lab subnets
-- keep management interfaces off the public internet
-- support changing public IPs through dynamic DNS if needed
+This architecture provides full administrative capability without exposing management web UIs or SSH ports directly to the public internet.
 
-## Step-by-step setup
+### A. WireGuard Device Assignment & Interface Binding
 
-### 1. Create the WireGuard instance on OPNsense
+#### 1. Server Instance Provisioning
 
-In OPNsense:
+Navigate to `VPN -> WireGuard -> Instances` in the OPNsense web UI to create the primary WireGuard server instance.
 
-1. go to the WireGuard instances section
-2. create the main server instance
-3. choose the listening port
-4. define the VPN subnet
-5. generate the server key pair
+- Device / Tunnel: `wg0` listening on UDP port `51820`
+- Tunnel Subnet: dedicated internal VPN network block defined as `10.10.10.X/24`
+- Instance Key Generation: generate a dedicated instance private key and instance public key pair exclusively for the OPNsense server instance
 
-Use sanitized documentation values in public notes rather than publishing live ones.
+#### 2. Peer Creation & Cryptographic Key Isolation
 
-### 2. Create a peer for each client
+Navigate to `VPN -> WireGuard -> Peers` to establish remote client configuration profiles.
 
-For each remote device:
+- Peer Profile: provision a client profile and assign it the static tunnel IP `10.10.10.X/32` under `Allowed IPs`
+- Cryptographic Key Isolation Principle: the peer profile must not reuse the server instance key pair
+- Generate a separate, unique client key pair
+- Save the client public key in OPNsense under the peer settings
+- Save the client private key only inside the client device configuration file
+- Client `AllowedIPs` Routing: configure `AllowedIPs` for the internal lab ranges, management ranges, or full-tunnel routing if intended
 
-1. create a peer entry
-2. assign a client tunnel IP
-3. generate a separate client key pair
-4. store the public key on the firewall
-5. keep the private key only on the client device
+#### 3. Interface Assignment & Activation
 
-!!! warning "Do not reuse keys"
-    The server and every client should have separate key pairs.
+Navigate to `Interfaces -> Assignments` in OPNsense and bind the underlying `wg0` virtual device as an assigned logical interface.
 
-The original notes also called out a practical routing detail: the client `AllowedIPs` setting should reflect what you actually want the client to send through the tunnel.
+Activating this interface allows OPNsense to:
 
-### 3. Assign the WireGuard interface
+- apply stateful firewall filtering
+- handle outbound source NAT translation for VPN client traffic
 
-In OPNsense:
+### B. Upstream Port Forwarding (Double NAT via TELUS Gateway)
 
-1. assign the WireGuard tunnel as an interface
-2. enable it
-3. give it a clear name
+Because the upstream TELUS residential gateway operates in routed mode and assigns OPNsense WAN a private address on the `192.168.1.X` subnet, incoming VPN connections traverse a double NAT path.
 
-This makes firewall policy easier to manage and troubleshoot.
+- Gateway Access: access the upstream TELUS modem portal
+- Forwarding Policy Configuration: create a port forwarding rule to relay external VPN traffic to OPNsense
 
-### 4. Handle upstream port forwarding if the firewall is behind another router
+Suggested forwarding values:
 
-If the firewall sits behind an upstream residential gateway, incoming VPN traffic may need to cross a double-NAT path.
+- Protocol: UDP
+- External Port: `51820`
+- Internal Destination IP: `192.168.1.X`
+- Internal Destination Port: `51820`
 
-In that case:
+WireGuard relies strictly on UDP. This rule ensures incoming UDP handshake packets hitting the public IP are forwarded directly through the TELUS firewall layer down to OPNsense.
 
-1. forward the WireGuard UDP port on the upstream router
-2. point it at the OPNsense WAN address
-3. verify the firewall is actually receiving the handshake traffic
+### C. Dynamic DNS Integration (DuckDNS Engine)
 
-### 5. Add the WAN-side rule for the handshake
+Because TELUS assigns dynamic public IP addresses via upstream DHCP, the home public IP periodically changes, which breaks static endpoint domain mappings.
 
-Allow the WireGuard UDP port on the OPNsense WAN side so the firewall can receive VPN connection attempts.
+- Functional Purpose: Dynamic DNS monitors the WAN interface IP and automatically updates an external domain record in real time whenever TELUS assigns a new IP
+- Plugin Installation: install the `os-ddclient` plugin package via `System -> Firmware -> Plugins`
+- DuckDNS Account Provisioning: create a DuckDNS account and generate a dedicated subdomain with an account API token
+- OPNsense DDNS Account Configuration:
+  - Service: Duck DNS
+  - Username: leave blank
+  - Password: DuckDNS account API token
+  - Hostname: DuckDNS hostname
+  - Check IP Method: Interface
+  - Interface to Monitor: WAN
+- Client Endpoint Mapping: configure the endpoint parameter in the WireGuard client configuration to the DuckDNS hostname and port `51820`
 
-### 6. Add the WireGuard interface rule
+### D. Firewall Policy Set Architecture
 
-On the WireGuard interface:
+To permit WireGuard handshake establishment and allow decrypted tunnel traffic to reach internal network segments, specific rules are required.
 
-1. allow traffic from the VPN client subnet
-2. limit destination scope as needed
-3. keep the rule broad only if that matches the intended access model
+#### 1. Inbound WAN Rule
 
-The original setup used a broad rule so authenticated VPN clients could reach internal services and VLANs.
+Location: `Firewall -> Rules -> WAN`
 
-### 7. Configure client routing
+- Action: Pass
+- Direction: In
+- Interface: WAN
+- Protocol: UDP
+- Destination: WAN address `192.168.1.X`
+- Destination Port: `51820`
 
-Choose what the client should send through the tunnel:
+This allows external encrypted WireGuard connection requests forwarded by the upstream modem to enter the WAN interface and reach the OPNsense WireGuard listening service.
 
-- only internal lab ranges
-- all internal plus management networks
-- full-tunnel traffic if that is intentional
+#### 2. WireGuard Traffic Rule
 
-Document the intent clearly so later troubleshooting is easier.
+Location: `Firewall -> Rules -> WireGuard / WG_VPN`
 
-### 8. Configure outbound NAT if return traffic needs help
+- Action: Pass
+- Direction: In
+- Interface: WireGuard
+- Protocol: Any
+- Source: WireGuard network `10.10.10.0/24`
+- Destination: Any
 
-The original notes also documented a hybrid outbound NAT approach for WireGuard traffic.
+This permits authenticated VPN clients originating from the `10.10.10.0/24` network to traverse OPNsense and access local subnets, administrative interfaces, and internal VLANs.
 
-Why this can matter:
+### E. Outbound NAT / Source NAT Translation
 
-- a remote VPN client may reach an internal host
-- the internal host may not know how to route return traffic back to the VPN subnet
-- source NAT can make the flow return cleanly through OPNsense
+Location: `Firewall -> NAT -> Source NAT`
 
-If this applies in the lab:
+- Mode Selection: change NAT mode from automatic source NAT rule generation to hybrid source NAT rule generation
+- Rule Configuration:
+  - Interface: LAN and target VLAN interfaces
+  - TCP/IP Version: IPv4
+  - Protocol: Any
+  - Source: WireGuard network `10.10.10.0/24`
+  - Destination: Any
+  - Translation / Target: interface address (masquerade)
 
-1. switch outbound NAT to the required mode
-2. add a rule for the VPN client subnet
-3. translate through the appropriate interface address
-4. test access to internal services again
+Technical justification:
 
-### 9. Configure DNS for VPN clients
+Without source NAT, when a remote VPN client `10.10.10.X` requests access to an internal LAN host like Proxmox `192.168.1.X`, the packet arrives at Proxmox displaying `10.10.10.X` as the source address.
 
-If I want internal names to resolve over VPN, the client should use the internal DNS resolver through the tunnel.
+If Proxmox does not have an explicit static route back to `10.10.10.0/24` via OPNsense, or if host firewalls reject non-local subnets, response packets are dropped.
 
-### 10. Handle dynamic public IP changes
-
-If the home connection changes public IPs:
-
-1. set up dynamic DNS
-2. point the WireGuard client endpoint to the DDNS name
-3. verify the record updates when the WAN IP changes
-
-This was part of the original guide because the upstream WAN address was not guaranteed to stay fixed.
-
-## Troubleshooting order
-
-If the VPN does not work, check in this order:
-
-1. client config
-2. key pair matching
-3. upstream port forward
-4. WAN UDP rule
-5. WireGuard interface rule
-6. return path or NAT behavior
-7. DNS expectations
-
-## Verification checklist
-
-- [ ] handshake succeeds from an external network
-- [ ] remote clients can reach intended internal services
-- [ ] internal DNS works if configured
-- [ ] admin interfaces remain private behind the VPN
-- [ ] no live keys or endpoints are published in docs
+Enabling hybrid source NAT instructs OPNsense to rewrite the packet source IP to OPNsense's own local interface IP such as `192.168.1.X`. Internal hosts then treat the request as coming locally from OPNsense, allowing return packets to route back cleanly through OPNsense's NAT state table to the VPN client.
 
 ## Related pages
 

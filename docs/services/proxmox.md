@@ -1,127 +1,157 @@
-# Proxmox VE Host Setup
+# Proxmox VE Bare-Metal Setup & Troubleshooting Guide
 
-This guide is based on my Proxmox bare-metal setup notes and keeps the install path short, practical, and easy to revisit.
+This document outlines the step-by-step process of installing and configuring Proxmox VE on a bare-metal physical node, troubleshooting initial network routing limitations, and preparing the host for virtualization.
 
-## Goal
+## Phase 1: Preparing the Installation Media
 
-Install Proxmox VE on the physical host, get the base network working cleanly, and prepare the node for VM provisioning.
+To deploy Proxmox VE, write the hypervisor image to a physical USB drive.
 
-## Host role
+1. Download the latest official Proxmox VE installer ISO
+2. Flash the media to an 8 GB or larger USB drive
 
-This machine is the main virtualization host for the homelab.
+BalenaEtcher is a simple option for creating and validating the installer media.
 
-It is responsible for:
+## Phase 2: Identifying the Local Network (LAN) Topology
 
-- running OPNsense
-- hosting internal VMs and future LXCs
-- providing the bridge layout used by the lab network
+Before installation, identify the local router or gateway IP so the server is placed on the correct subnet.
 
-## Phase 1: Prepare the installation media
+### Finding your network parameters from a daily device
 
-1. download the official Proxmox VE installer ISO
-2. write it to a USB drive
-3. validate the boot media before moving on
+- On macOS: hold the `Option` key and click the Wi-Fi icon in the menu bar
+- On Windows: run `ipconfig` and look for the IPv4 address and default gateway
+- On mobile: open the Wi-Fi connection details and find the router or gateway IP
 
-Using a tool like BalenaEtcher is a simple, reliable path here.
+Example topology:
 
-## Phase 2: Identify the upstream LAN details
+- Local Subnet: `192.168.1.0/24`
+- Router / Gateway IP: `192.168.1.X`
 
-Before installation, confirm the network you are plugging the host into:
+## Phase 3: Hardware Provisioning & Installation
 
-- local subnet
-- router or default gateway
-- whether the environment is friendly to static addressing during first boot
+### 1. BIOS Configurations
 
-For public docs, I keep these values sanitized rather than publishing live ones.
-
-## Phase 3: BIOS and hardware checks
-
-Before installing:
-
+- access the BIOS during boot
 - enable CPU virtualization
-- enable VT-d or equivalent IOMMU support
-- disable Secure Boot if it interferes
-- confirm which physical NIC is actually cabled
+- enable `VT-d` or equivalent directed I/O support
+- disable Secure Boot if it interferes with the Proxmox kernel
 
-!!! warning "Confirm the correct NIC first"
-    If the host has multiple physical network ports, make sure you know which one is connected before you start debugging Proxmox networking.
+### 2. Booting the Installer
 
-## Phase 4: Install Proxmox VE
+- insert the bootable USB drive
+- open the one-time boot menu
+- boot via UEFI
 
-Boot from the installer and complete the normal installation flow.
+### 3. Selecting the Network Interface
 
-At this point, the priority is not a perfect network design. The priority is a stable host you can reach reliably.
+If the hardware contains multiple physical ports:
 
-## Phase 5: Troubleshoot first-boot networking
+- identify the default onboard interface
+- confirm the physical Ethernet cable is connected to the intended port
 
-One of the main issues in my original notes was a static network configuration that looked valid but did not route cleanly through the upstream gateway.
+## Phase 4: Troubleshooting Network Isolation (Static vs DHCP)
 
-If the host can talk locally but cannot reach the internet:
+During a standard installation, setting a manual static IP can sometimes lead to routing isolation if the upstream router restricts manual IP assignments.
 
-1. open the Proxmox console
-2. inspect `/etc/network/interfaces`
-3. if needed, temporarily switch the main bridge from static to DHCP
-4. restart networking
-5. confirm the new bridge address
+If the Proxmox host can access the local network but fails to ping the WAN or internet, switching the interface from static to DHCP can let the router assign a validated lease.
 
-Example commands:
+### Steps to switch Proxmox from Static IP to DHCP
+
+1. log in to the physical Proxmox console or SSH session
+2. open the Debian network configuration file:
 
 ```bash
 nano /etc/network/interfaces
-systemctl restart networking
-ip addr show dev vmbr0
-ip neigh show
 ```
 
-## Example bridge pattern
+3. modify the configuration by commenting out the static lines and changing the bridge interface `vmbr0` from `static` to `dhcp`
 
-The current lab uses:
+Before:
 
-| Bridge | Purpose |
-| --- | --- |
-| `vmbr0` | Upstream/WAN-facing bridge |
-| `vmbr1` | Internal lab bridge |
+```bash
+iface lo inet loopback
 
-The first install only needs `vmbr0` working well. The rest can come after.
+iface nic1 inet manual
 
-## Why DHCP helped during troubleshooting
+auto vmbr0
+iface vmbr0 inet static
+        address 192.168.1.X/24
+        gateway 192.168.1.X
+        bridge-ports nic1
+        bridge-stp off
+        bridge-fd 0
+```
 
-In the original setup, switching from a manual static address to DHCP helped confirm whether the problem was:
+After:
 
-- the Proxmox network file
-- the upstream router policy
-- or a simple mismatch between expected and accepted addressing
+```bash
+auto lo
+iface lo inet loopback
 
-That was a useful first-pass sanity check before making the design more permanent.
+iface nic1 inet manual
 
-## Router ping caveat
+auto vmbr0
+iface vmbr0 inet dhcp
+#       address 192.168.1.X/24
+#       gateway 192.168.1.X
+        bridge-ports nic1
+        bridge-stp off
+        bridge-fd 0
+```
 
-If the host cannot ping the upstream router, that does not always mean the path is broken.
+4. save and exit the file
+5. reload the network stack:
 
-Some gateways drop ICMP. The ARP or neighbor table can be a better test:
+```bash
+systemctl restart networking
+```
+
+6. check the newly assigned bridge IP:
+
+```bash
+ip addr show dev vmbr0
+```
+
+The Proxmox web UI can then be reached at:
+
+```text
+https://<NEW_IP_ADDRESS>:8006
+```
+
+### Tip: Why can't I ping my router?
+
+Some residential gateways drop ICMP by default.
+
+If the router does not answer pings, check the ARP or neighbor table instead:
 
 ```bash
 ip neigh show
 ```
 
-## Phase 6: Post-install cleanup
+If the router appears reachable there, the physical and logical local connection may still be working correctly.
 
-A fresh Proxmox install often points at enterprise repositories that are not useful on a personal non-subscription lab host.
+## Phase 5: Post-Install Optimization & Package Repository Fix
 
-The cleanup path is:
+By default, Proxmox may attempt to use enterprise repositories that are not useful on a non-subscription lab host.
 
-1. disable or replace the enterprise repository
-2. enable the no-subscription or community path
-3. update the host
-4. confirm the host is ready for VM deployment
+To transition to the free community update path and optimize the system:
 
-## Verification checklist
+1. open the shell of the main node in the Proxmox web UI
+2. run the post-install helper script or manually switch to the no-subscription repository path
 
-- [ ] Proxmox boots cleanly
-- [ ] the main bridge has a working network path
-- [ ] the web UI is reachable
-- [ ] package repositories work cleanly
-- [ ] the host is ready for OPNsense and other VMs
+Example helper script:
+
+```bash
+bash -c "$(wget -qLO - https://github.com/community-scripts/ProxmoxVE/raw/main/misc/post-pve-install.sh)"
+```
+
+Key optimizations performed:
+
+- disables the default paid enterprise repository
+- enables the free no-subscription repository
+- disables the no active subscription warning pop-up on login
+- updates core OS packages and system utilities
+
+Your hypervisor is then ready for VM provisioning.
 
 ## Related pages
 
