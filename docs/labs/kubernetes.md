@@ -1,4 +1,4 @@
-# Kubernetes
+# Argo CD & Kubernetes
 
 ## Status
 
@@ -6,7 +6,7 @@ Planned
 
 ## Goal
 
-Use the lab to learn Kubernetes gradually without skipping the infrastructure basics underneath it.
+Learn Kubernetes without skipping the infrastructure underneath it, then introduce Argo CD so Git becomes the declared source of truth.
 
 ## Notes to document later
 
@@ -15,3 +15,7 @@ Use the lab to learn Kubernetes gradually without skipping the infrastructure ba
 - storage choices
 - ingress
 - observability
+- manifests and packaging
+- Argo CD applications
+- reconciliation and drift
+- rollback through Git

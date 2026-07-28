@@ -8,10 +8,26 @@ repo_url: https://github.com/Aaronarphaxad/homelab
 
 theme:
   name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - navigation.tabs
     - navigation.indexes
     - navigation.sections
+    - navigation.top
     - search.highlight
     - content.code.copy
 
@@ -49,11 +65,14 @@ nav:
       - Hardware & Host: architecture/hardware.md
   - Labs:
       - labs/index.md
-      - Active Directory: labs/active-directory.md
+      - Linux Administration: labs/linux-administration.md
+      - Hybrid AD & Entra ID: labs/active-directory.md
+      - CI/CD: labs/ci-cd.md
       - Monitoring: labs/monitoring.md
       - Automation: labs/automation.md
       - SIEM: labs/siem.md
-      - Kubernetes: labs/kubernetes.md
+      - Argo CD & Kubernetes: labs/kubernetes.md
+      - Nginx Reverse Proxy: labs/nginx-reverse-proxy.md
   - Infrastructure & Services:
       - services/index.md
       - Proxmox VE Host Setup: services/proxmox.md

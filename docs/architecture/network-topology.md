@@ -53,7 +53,7 @@ flowchart TB
         PROXY["Planned: Nginx reverse proxy<br/>and load-balancing lab"]
 
         V30["VLAN 30 · Applications<br/>10.0.30.0/24"]
-        BENTO["BentoPDF LXC<br/>10.0.30.173:8443"]
+        BENTO["BentoPDF LXC<br/>10.0.30.xxx:8443"]
 
         V10 --> DEBIAN
         V20 -. "future workload" .-> PROXY
